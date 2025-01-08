@@ -130,17 +130,6 @@ public class AngryHaldor : BaseUnityPlugin
         return haldorCache;
     }
 
-    private static void MakeCreaturesIgnoreEffectArea(GameObject creature)
-    {
-        var effectAreaComponents = creature.GetComponentsInChildren<EffectArea>();
-        foreach (var effectArea in effectAreaComponents)
-        {
-            GameObject.Destroy(effectArea);
-        }
-
-        AngryHaldor.Instance.Logger.LogInfo($"Removed EffectArea components from {creature.name}");
-    }
-
 
 
     private static void TransformHaldorToAngry(GameObject haldor)
@@ -153,7 +142,20 @@ public class AngryHaldor : BaseUnityPlugin
 
         isAngryHaldorSpawned = true;
 
-        AngryHaldor.Instance.Logger.LogInfo("Disabling ForceField before transformation...");
+        // Disable Location.cs temporarily
+        GameObject vendor = GameObject.Find("Vendor_BlackForest(Clone)");
+        Location locationScript = null;
+        if (vendor != null)
+        {
+            locationScript = vendor.GetComponent<Location>();
+            if (locationScript != null)
+            {
+                locationScript.enabled = false;
+                AngryHaldor.Instance.Logger.LogInfo("Temporarily disabled Location.cs on Vendor_BlackForest.");
+            }
+        }
+
+        // Disabling ForceField before transformation
         if (forceFieldCache != null)
         {
             forceFieldCache.SetActive(false);
@@ -176,7 +178,6 @@ public class AngryHaldor : BaseUnityPlugin
         // Spawn AngryHalstein
         if (halsteinCache != null)
         {
-            AngryHaldor.Instance.Logger.LogInfo("Disabling Halstein...");
             halsteinCache.SetActive(false);
 
             var angryHalsteinPrefab = ZNetScene.instance.GetPrefab(AngryHalsteinPrefabName);
@@ -186,10 +187,8 @@ public class AngryHaldor : BaseUnityPlugin
             }
             else
             {
-                AngryHaldor.Instance.Logger.LogInfo("Spawning AngryHalstein...");
                 spawnedLox = Instantiate(angryHalsteinPrefab, halsteinCache.transform.position, halsteinCache.transform.rotation);
                 spawnedLox.name = "AngryHalstein";
-                MakeCreaturesIgnoreEffectArea(spawnedLox);
             }
         }
 
@@ -204,13 +203,19 @@ public class AngryHaldor : BaseUnityPlugin
             return;
         }
 
-        AngryHaldor.Instance.Logger.LogInfo("Spawning AngryHaldor...");
         var angryHaldor = Instantiate(angryHaldorPrefab, originalPosition, originalRotation);
         angryHaldor.name = AngryHaldorPrefabName;
-        MakeCreaturesIgnoreEffectArea(angryHaldor);
 
         AngryHaldor.Instance.Logger.LogInfo("AngryHaldor successfully spawned!");
+
+        // Re-enable Location.cs after the transformation
+        if (locationScript != null)
+        {
+            locationScript.enabled = true;
+            AngryHaldor.Instance.Logger.LogInfo("Re-enabled Location.cs on Vendor_BlackForest.");
+        }
     }
+
 
     public static IEnumerator ResetAll()
     {
