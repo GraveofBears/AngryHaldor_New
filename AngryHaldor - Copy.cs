@@ -46,7 +46,6 @@ public class AngryHaldor : BaseUnityPlugin
     private ConfigEntry<string> configTraderItems;
     // Config format: ItemName,Stack,Price:ItemName,Stack,Price
     private const string DefaultTraderItems = "BarrelRings,1,100:FishingBait,20,350";
-    private ConfigEntry<float> configSpawnIntervalDays;
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
     {
@@ -109,15 +108,8 @@ public class AngryHaldor : BaseUnityPlugin
         configTraderItems = config(
             "Trader",
             "Items",
-            "BarrelRings,1,100:FishingBait,20,350",
+            DefaultTraderItems,
             "List of items sold by the trader in the format: ItemName,Stack,Price:ItemName,Stack,Price"
-        );
-
-        configSpawnIntervalDays = config(
-            "Trader",
-            "SpawnIntervalDays",
-            10f,
-            "Interval (in in-game days) between TravelingHaldor spawns"
         );
 
 
@@ -129,103 +121,58 @@ public class AngryHaldor : BaseUnityPlugin
         Harmony harmony = new(ModGUID);
         harmony.PatchAll(assembly);
     }
-    private void Update()
+
+    void Update()
     {
-        if (!envManInitialized) return;
-
-        try
+        // Check in-game day for TravelingHaldor spawn
+        if (EnvMan.instance.GetDayFraction() < 0.01 && EnvMan.instance.GetCurrentDay() >= nextTravelingTraderSpawnDay)
         {
-            if (Player.m_localPlayer == null) return;
-
-            if (EnvMan.instance.GetDayFraction() < 0.01 && EnvMan.instance.GetCurrentDay() >= nextTravelingTraderSpawnDay)
-            {
-                nextTravelingTraderSpawnDay = EnvMan.instance.GetCurrentDay() + configSpawnIntervalDays.Value;
-                SpawnTravelingHaldor();
-            }
+            nextTravelingTraderSpawnDay = EnvMan.instance.GetCurrentDay() + TravelingTraderSpawnIntervalDays;
+            SpawnTravelingHaldor();
         }
-        catch (System.Exception ex)
-        {
-            Logger.LogError($"Error in Update: {ex}");
-        }
-    }
-
-
-    private bool envManInitialized = false;
-
-    private IEnumerator WaitForEnvMan()
-    {
-        if (EnvMan.instance == null)
-        {
-            Logger.LogInfo("Waiting for EnvMan instance...");
-        }
-
-        while (EnvMan.instance == null)
-        {
-            yield return new WaitForSeconds(0.5f); // Check every 0.5 seconds
-        }
-
-        envManInitialized = true;
-        Logger.LogInfo("EnvMan instance is ready. Starting logic.");
-        InitializeTravelingHaldor();
-    }
-    private void InitializeTravelingHaldor()
-    {
-        Logger.LogInfo("TravelingHaldor initialization completed.");
-        // Add any initialization logic for TravelingHaldor here.
-    }
-    private void Start()
-    {
-        StartCoroutine(WaitForEnvMan());
     }
     private void AddAndConfigureTrader(GameObject travelingHaldor)
     {
-        // Ensure ZNetView is present
-        if (!travelingHaldor.GetComponent<ZNetView>())
-        {
-            travelingHaldor.AddComponent<ZNetView>();
-            Logger.LogInfo("Added ZNetView to TravelingHaldor.");
-        }
+        // Dynamically add the Trader component
+        var trader = travelingHaldor.AddComponent<Trader>();
 
-        // Add Trader component dynamically
-        var trader = travelingHaldor.GetComponent<Trader>();
-        if (trader == null)
-        {
-            trader = travelingHaldor.AddComponent<Trader>();
-            Logger.LogInfo("Added Trader component to TravelingHaldor.");
-        }
-
-        // Configure trader items
+        // Configure trader items dynamically
         AddTraderItems(trader);
+    }
 
-        // Find the Trader_Collider child
-        Transform traderCollider = travelingHaldor.transform.Find("Trader_Collider");
-        if (traderCollider == null)
+    private void SpawnTravelingHaldor()
+    {
+        Player player = Player.m_localPlayer;
+        if (player == null)
         {
-            Logger.LogError("Trader_Collider child object not found. Interaction may not work.");
+            Logger.LogWarning("Player not found. Cannot spawn TravelingHaldor.");
             return;
         }
 
-        var collider = traderCollider.GetComponent<Collider>();
-        if (collider == null)
+        Vector3 spawnPosition = player.transform.position + Random.insideUnitSphere * 20f; // Spawn within 20m radius
+        spawnPosition.y = ZoneSystem.instance.GetGroundHeight(spawnPosition);
+
+        GameObject prefab = ZNetScene.instance.GetPrefab("TravelingHaldor");
+        if (prefab == null)
         {
-            Logger.LogError("Trader_Collider does not have a Collider component.");
+            Logger.LogError("TravelingHaldor prefab not found in ZNetScene!");
             return;
         }
 
-        if (!collider.isTrigger)
+        GameObject travelingHaldor = Instantiate(prefab, spawnPosition, Quaternion.identity);
+        if (travelingHaldor == null)
         {
-            Logger.LogWarning("Trader_Collider is not set as a trigger. Enabling Is Trigger.");
-            collider.isTrigger = true;
+            Logger.LogError("Failed to instantiate TravelingHaldor.");
+            return;
         }
 
-        // Ensure the Trader_Collider is on the correct layer
-        if (traderCollider.gameObject.layer != LayerMask.NameToLayer("Default"))
-        {
-            traderCollider.gameObject.layer = LayerMask.NameToLayer("Default"); // Or "Interactable"
-            Logger.LogInfo("Set Trader_Collider layer to Default.");
-        }
+        travelingHaldor.name = "TravelingHaldor";
 
-        Logger.LogInfo($"Trader configured for {travelingHaldor.name} with {trader.m_items.Count} items.");
+        // Add and configure the Trader component
+        AddAndConfigureTrader(travelingHaldor);
+
+        // Start despawn timer
+        StartCoroutine(DespawnTravelingHaldor(travelingHaldor));
     }
 
 
@@ -280,42 +227,6 @@ public class AngryHaldor : BaseUnityPlugin
             Logger.LogInfo($"Added trader item: {itemName}, Stack: {stack}, Price: {price}");
         }
     }
-
-    private void SpawnTravelingHaldor()
-    {
-        Player player = Player.m_localPlayer;
-        if (player == null)
-        {
-            Logger.LogWarning("Player not found. Cannot spawn TravelingHaldor.");
-            return;
-        }
-
-        Vector3 spawnPosition = player.transform.position + Random.insideUnitSphere * 20f; // Spawn within 20m radius
-        spawnPosition.y = ZoneSystem.instance.GetGroundHeight(spawnPosition);
-
-        GameObject prefab = ZNetScene.instance.GetPrefab("TravelingHaldor");
-        if (prefab == null)
-        {
-            Logger.LogError("TravelingHaldor prefab not found in ZNetScene!");
-            return;
-        }
-
-        GameObject travelingHaldor = Instantiate(prefab, spawnPosition, Quaternion.identity);
-        if (travelingHaldor == null)
-        {
-            Logger.LogError("Failed to instantiate TravelingHaldor.");
-            return;
-        }
-
-        travelingHaldor.name = "TravelingHaldor";
-
-        // Add and configure the Trader component
-        AddAndConfigureTrader(travelingHaldor);
-
-        // Start despawn timer
-        StartCoroutine(DespawnTravelingHaldor(travelingHaldor));
-    }
-
 
 
     private IEnumerator DespawnTravelingHaldor(GameObject travelingHaldor)

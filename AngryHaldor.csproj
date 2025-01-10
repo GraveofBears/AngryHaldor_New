@@ -117,7 +117,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AngryHaldor.cs" />
-    <Compile Include="patches\AngryHaldorPatch.cs" />
+    <Compile Include="patches\AngryHaldorPatches.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
