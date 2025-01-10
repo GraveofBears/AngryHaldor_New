@@ -13,6 +13,7 @@ namespace AngryHaldorPatches
     {
         private static readonly MethodInfo TraderObjectCheckMethod = AccessTools.DeclaredMethod(typeof(AllowTamedInNoMonsterArea), nameof(TraderObjectCheck));
         private static readonly MethodInfo IsPointInsideAreaMethod = AccessTools.DeclaredMethod(typeof(EffectArea), nameof(EffectArea.IsPointInsideArea));
+        private static readonly MethodInfo LocationCheckMethod = AccessTools.DeclaredMethod(typeof(AllowTamedInNoMonsterArea), nameof(LocationCheck));
 
         private static EffectArea? TraderObjectCheck(EffectArea? targetEffectArea, MonsterAI monsterAI)
         {
@@ -27,6 +28,15 @@ namespace AngryHaldorPatches
             // Allow AngryHaldor and AngryHalstein to ignore NoMonsterArea
             string prefabName = Utils.GetPrefabName(monsterAI.gameObject.name);
             return prefabName is "AngryHalstein" or "AngryHaldor" ? null : targetEffectArea;
+        }
+
+        private static bool LocationCheck(Location? location, MonsterAI monsterAI)
+        {
+            if (location == null) return true;
+
+            // Allow AngryHaldor and AngryHalstein to ignore location-based fleeing
+            string prefabName = Utils.GetPrefabName(monsterAI.gameObject.name);
+            return prefabName is not ("AngryHalstein" or "AngryHaldor");
         }
 
         [UsedImplicitly]
@@ -44,6 +54,13 @@ namespace AngryHaldorPatches
                     // Inject a call to TraderObjectCheck after the area check
                     yield return new CodeInstruction(OpCodes.Ldarg_0); // Load 'this' (MonsterAI)
                     yield return new CodeInstruction(OpCodes.Call, TraderObjectCheckMethod);
+                }
+
+                // Look for any location-based fleeing logic and inject a location check
+                if (instrs[i].opcode == OpCodes.Callvirt && instrs[i].operand is MethodInfo method && method.Name.Contains("IsInsideLocation"))
+                {
+                    yield return new CodeInstruction(OpCodes.Ldarg_0); // Load 'this' (MonsterAI)
+                    yield return new CodeInstruction(OpCodes.Call, LocationCheckMethod);
                 }
             }
         }

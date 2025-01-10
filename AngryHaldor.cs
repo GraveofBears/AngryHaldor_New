@@ -5,6 +5,8 @@
  */
 
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
@@ -13,7 +15,6 @@ using ServerSync;
 using ItemManager;
 using BepInEx.Configuration;
 using System.Reflection;
-using UnityEngine.AI;
 
 [BepInPlugin(ModGUID, ModName, ModVersion)]
 public class AngryHaldor : BaseUnityPlugin
@@ -36,6 +37,15 @@ public class AngryHaldor : BaseUnityPlugin
     private static GameObject forceFieldCache;
     private static GameObject spawnedLox;
     private static bool isAngryHaldorSpawned = false;
+
+    private const float TravelingTraderSpawnIntervalDays = 10f; // Spawn every 10 in-game days
+    private const float TravelingTraderWanderDurationSeconds = 600f; // Despawn after 600 seconds
+    private static float nextTravelingTraderSpawnDay = 0;
+
+    // Configuration variables for TravelingHaldor items
+    private ConfigEntry<string> configTraderItems;
+    // Config format: ItemName,Stack,Price:ItemName,Stack,Price
+    private const string DefaultTraderItems = "BarrelRings,1,100:FishingBait,20,350";
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
     {
@@ -87,6 +97,22 @@ public class AngryHaldor : BaseUnityPlugin
         AngryHalstein.Drops["LoxMeat"].Amount = new Range(1, 2);
         AngryHalstein.Drops["LoxMeat"].DropChance = 100f;
 
+        Creature travelingHaldor = new("hangryaldor", "TravelingHaldor")
+        {
+            Biome = Heightmap.Biome.None,
+            CreatureFaction = Character.Faction.Dverger,
+            Maximum = 1
+        };
+        travelingHaldor.Localize().English("Traveling Haldor");
+        // Add configuration for trader items
+        configTraderItems = config(
+            "Trader",
+            "Items",
+            DefaultTraderItems,
+            "List of items sold by the trader in the format: ItemName,Stack,Price:ItemName,Stack,Price"
+        );
+
+
         // Assign the singleton instance
         Instance = this;
 
@@ -94,6 +120,124 @@ public class AngryHaldor : BaseUnityPlugin
         Assembly assembly = Assembly.GetExecutingAssembly();
         Harmony harmony = new(ModGUID);
         harmony.PatchAll(assembly);
+    }
+
+    void Update()
+    {
+        // Check in-game day for TravelingHaldor spawn
+        if (EnvMan.instance.GetDayFraction() < 0.01 && EnvMan.instance.GetCurrentDay() >= nextTravelingTraderSpawnDay)
+        {
+            nextTravelingTraderSpawnDay = EnvMan.instance.GetCurrentDay() + TravelingTraderSpawnIntervalDays;
+            SpawnTravelingHaldor();
+        }
+    }
+    private void AddAndConfigureTrader(GameObject travelingHaldor)
+    {
+        // Dynamically add the Trader component
+        var trader = travelingHaldor.AddComponent<Trader>();
+
+        // Configure trader items dynamically
+        AddTraderItems(trader);
+    }
+
+    private void SpawnTravelingHaldor()
+    {
+        Player player = Player.m_localPlayer;
+        if (player == null)
+        {
+            Logger.LogWarning("Player not found. Cannot spawn TravelingHaldor.");
+            return;
+        }
+
+        Vector3 spawnPosition = player.transform.position + Random.insideUnitSphere * 20f; // Spawn within 20m radius
+        spawnPosition.y = ZoneSystem.instance.GetGroundHeight(spawnPosition);
+
+        GameObject prefab = ZNetScene.instance.GetPrefab("TravelingHaldor");
+        if (prefab == null)
+        {
+            Logger.LogError("TravelingHaldor prefab not found in ZNetScene!");
+            return;
+        }
+
+        GameObject travelingHaldor = Instantiate(prefab, spawnPosition, Quaternion.identity);
+        if (travelingHaldor == null)
+        {
+            Logger.LogError("Failed to instantiate TravelingHaldor.");
+            return;
+        }
+
+        travelingHaldor.name = "TravelingHaldor";
+
+        // Add and configure the Trader component
+        AddAndConfigureTrader(travelingHaldor);
+
+        // Start despawn timer
+        StartCoroutine(DespawnTravelingHaldor(travelingHaldor));
+    }
+
+
+    private void AddTraderItems(Trader trader)
+    {
+        trader.m_items.Clear();
+
+        string itemsConfig = configTraderItems.Value;
+        if (string.IsNullOrWhiteSpace(itemsConfig))
+        {
+            Logger.LogWarning("Trader items configuration is empty. No items will be added.");
+            return;
+        }
+
+        string[] items = itemsConfig.Split(':');
+        foreach (string itemConfig in items)
+        {
+            string[] parts = itemConfig.Split(',');
+            if (parts.Length != 3)
+            {
+                Logger.LogWarning($"Invalid trader item entry: {itemConfig}. Skipping.");
+                continue;
+            }
+
+            string itemName = parts[0].Trim();
+            if (!int.TryParse(parts[1].Trim(), out int stack) || stack <= 0)
+            {
+                Logger.LogWarning($"Invalid stack size for item: {itemName}. Skipping.");
+                continue;
+            }
+
+            if (!int.TryParse(parts[2].Trim(), out int price) || price < 0)
+            {
+                Logger.LogWarning($"Invalid price for item: {itemName}. Skipping.");
+                continue;
+            }
+
+            ItemDrop itemPrefab = ZNetScene.instance.GetPrefab(itemName)?.GetComponent<ItemDrop>();
+            if (itemPrefab == null)
+            {
+                Logger.LogWarning($"Item prefab not found: {itemName}. Skipping.");
+                continue;
+            }
+
+            trader.m_items.Add(new Trader.TradeItem
+            {
+                m_prefab = itemPrefab,
+                m_stack = stack,
+                m_price = price
+            });
+
+            Logger.LogInfo($"Added trader item: {itemName}, Stack: {stack}, Price: {price}");
+        }
+    }
+
+
+    private IEnumerator DespawnTravelingHaldor(GameObject travelingHaldor)
+    {
+        yield return new WaitForSeconds(TravelingTraderWanderDurationSeconds);
+
+        if (travelingHaldor != null)
+        {
+            Destroy(travelingHaldor);
+            Logger.LogInfo("Despawned Traveling Haldor.");
+        }
     }
 
     private static GameObject FindHaldorInstance()
@@ -130,7 +274,85 @@ public class AngryHaldor : BaseUnityPlugin
         return haldorCache;
     }
 
+    private static void MakeCreaturesIgnoreEffectArea(GameObject creature)
+    {
+        var effectAreaComponents = creature.GetComponentsInChildren<EffectArea>();
+        foreach (var effectArea in effectAreaComponents)
+        {
+            GameObject.Destroy(effectArea);
+        }
 
+        AngryHaldor.Instance.Logger.LogInfo($"Removed EffectArea components from {creature.name}");
+    }
+
+    private static void ForceTargetPlayer(GameObject creature)
+    {
+        var monsterAI = creature.GetComponent<MonsterAI>();
+        if (monsterAI != null)
+        {
+            var player = Player.m_localPlayer;
+            if (player != null && monsterAI.m_nview.IsOwner())
+            {
+                AngryHaldor.Instance.Logger.LogInfo($"{creature.name} is now targeting and attacking player {player.GetPlayerName()}...");
+                monsterAI.SetTarget(player.GetComponent<Character>()); // Set the player as the attack target
+                monsterAI.ResetPatrolPoint(); // Clear patrol behavior
+                monsterAI.m_alerted = true; // Mark as alerted
+            }
+        }
+        else
+        {
+            AngryHaldor.Instance.Logger.LogWarning($"{creature.name} does not have a MonsterAI component.");
+        }
+    }
+    private static void DebugSceneHierarchy()
+    {
+        AngryHaldor.Instance.Logger.LogInfo("Scene Hierarchy Debug:");
+        foreach (var obj in GameObject.FindObjectsOfType<GameObject>())
+        {
+            AngryHaldor.Instance.Logger.LogInfo($"Object: {obj.name}, Path: {GetFullPath(obj.transform)}");
+        }
+    }
+
+    private static string GetFullPath(Transform transform)
+    {
+        return transform.parent == null ? transform.name : $"{GetFullPath(transform.parent)}/{transform.name}";
+    }
+
+    private static void DisableForceFieldAndNoMonsterArea()
+    {
+        // Locate Vendor_BlackForest(Clone) in the scene
+        var vendorLocation = GameObject.FindObjectsOfType<GameObject>()
+            .FirstOrDefault(obj => obj.name == "Vendor_BlackForest(Clone)");
+        if (vendorLocation == null)
+        {
+            AngryHaldor.Instance.Logger.LogWarning("Vendor_BlackForest(Clone) not found in the scene.");
+            return;
+        }
+
+        // Search for ForceField under Vendor_BlackForest(Clone)
+        var forceField = vendorLocation.GetComponentsInChildren<Transform>()
+            .FirstOrDefault(child => child.name == "ForceField");
+        if (forceField == null)
+        {
+            AngryHaldor.Instance.Logger.LogWarning("ForceField not found under Vendor_BlackForest(Clone).");
+            return;
+        }
+
+        AngryHaldor.Instance.Logger.LogInfo("Disabling ForceField...");
+        forceField.gameObject.SetActive(false);
+
+        // Search for NoMonsterArea under ForceField
+        var noMonsterArea = forceField.GetComponentsInChildren<Transform>()
+            .FirstOrDefault(child => child.name == "NoMonsterArea");
+        if (noMonsterArea == null)
+        {
+            AngryHaldor.Instance.Logger.LogWarning("NoMonsterArea not found under ForceField.");
+            return;
+        }
+
+        AngryHaldor.Instance.Logger.LogInfo("Disabling NoMonsterArea...");
+        noMonsterArea.gameObject.SetActive(false);
+    }
 
     private static void TransformHaldorToAngry(GameObject haldor)
     {
@@ -142,28 +364,8 @@ public class AngryHaldor : BaseUnityPlugin
 
         isAngryHaldorSpawned = true;
 
-        // Disable Location.cs temporarily
-        GameObject vendor = GameObject.Find("Vendor_BlackForest(Clone)");
-        Location locationScript = null;
-        if (vendor != null)
-        {
-            locationScript = vendor.GetComponent<Location>();
-            if (locationScript != null)
-            {
-                locationScript.enabled = false;
-                AngryHaldor.Instance.Logger.LogInfo("Temporarily disabled Location.cs on Vendor_BlackForest.");
-            }
-        }
-
-        // Disabling ForceField before transformation
-        if (forceFieldCache != null)
-        {
-            forceFieldCache.SetActive(false);
-            foreach (Transform child in forceFieldCache.transform)
-            {
-                child.gameObject.SetActive(false);
-            }
-        }
+        AngryHaldor.Instance.Logger.LogInfo("Disabling ForceField and NoMonsterArea before spawning AngryHaldor and AngryHalstein...");
+        DisableForceFieldAndNoMonsterArea(); // Ensure this is invoked
 
         AngryHaldor.Instance.Logger.LogInfo("Transforming Haldor to AngryHaldor...");
         var haldorObject = FindHaldorInstance();
@@ -178,6 +380,7 @@ public class AngryHaldor : BaseUnityPlugin
         // Spawn AngryHalstein
         if (halsteinCache != null)
         {
+            AngryHaldor.Instance.Logger.LogInfo("Disabling Halstein...");
             halsteinCache.SetActive(false);
 
             var angryHalsteinPrefab = ZNetScene.instance.GetPrefab(AngryHalsteinPrefabName);
@@ -187,8 +390,11 @@ public class AngryHaldor : BaseUnityPlugin
             }
             else
             {
+                AngryHaldor.Instance.Logger.LogInfo("Spawning AngryHalstein...");
                 spawnedLox = Instantiate(angryHalsteinPrefab, halsteinCache.transform.position, halsteinCache.transform.rotation);
                 spawnedLox.name = "AngryHalstein";
+                MakeCreaturesIgnoreEffectArea(spawnedLox);
+                ForceTargetPlayer(spawnedLox);
             }
         }
 
@@ -203,19 +409,14 @@ public class AngryHaldor : BaseUnityPlugin
             return;
         }
 
+        AngryHaldor.Instance.Logger.LogInfo("Spawning AngryHaldor...");
         var angryHaldor = Instantiate(angryHaldorPrefab, originalPosition, originalRotation);
         angryHaldor.name = AngryHaldorPrefabName;
+        MakeCreaturesIgnoreEffectArea(angryHaldor);
+        ForceTargetPlayer(angryHaldor);
 
         AngryHaldor.Instance.Logger.LogInfo("AngryHaldor successfully spawned!");
-
-        // Re-enable Location.cs after the transformation
-        if (locationScript != null)
-        {
-            locationScript.enabled = true;
-            AngryHaldor.Instance.Logger.LogInfo("Re-enabled Location.cs on Vendor_BlackForest.");
-        }
     }
-
 
     public static IEnumerator ResetAll()
     {
@@ -293,6 +494,14 @@ public class AngryHaldor : BaseUnityPlugin
 
             AngryHaldor.Instance.Logger.LogInfo("Player interacted with Haldor.");
 
+            // Allow interaction to proceed
+            bool canInteract = __instance.GetComponent<ZNetView>()?.IsValid() == true;
+            if (!canInteract)
+            {
+                __result = false; // Prevent interaction
+                return false;
+            }
+
             // Start the anger timer if not already running
             if (!AngryHaldor.isAngryHaldorSpawned)
             {
@@ -303,14 +512,12 @@ public class AngryHaldor : BaseUnityPlugin
             return true; // Allow original interaction logic to proceed
         }
     }
-
     public static IEnumerator StartAngerTimeout(GameObject haldor)
     {
         AngryHaldor.Instance.Logger.LogInfo("Starting anger timeout timer...");
-        yield return new WaitForSeconds(AngryHaldor.TimeoutBeforeAnger);
+        yield return new WaitForSeconds(TimeoutBeforeAnger);
 
         AngryHaldor.Instance.Logger.LogInfo("Anger timeout expired. Transforming Haldor to AngryHaldor...");
-        if (haldor != null) AngryHaldor.TransformHaldorToAngry(haldor);
+        if (haldor != null) TransformHaldorToAngry(haldor);
     }
-
 }
