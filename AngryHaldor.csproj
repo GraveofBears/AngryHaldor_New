@@ -118,6 +118,8 @@
   <ItemGroup>
     <Compile Include="AngryHaldor.cs" />
     <Compile Include="patches\AngryHaldorPatches.cs" />
+    <Compile Include="patches\CustomTraderInteraction.cs" />
+    <Compile Include="patches\TraderUpdatePatch.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
