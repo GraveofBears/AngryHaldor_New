@@ -14,17 +14,25 @@ public class TraderUpdatePatch
         if (distance < __instance.m_greetRange && !__instance.m_didGreet)
         {
             __instance.m_didGreet = true;
-            __instance.Say(__instance.CheckConditionals(__instance.m_randomGreets, true), ""); // Skip animation trigger
-            __instance.m_randomGreetFX.Create(__instance.transform.position, Quaternion.identity);
+            Debug.Log($"Greets count: {__instance.m_randomGreets.Count}");
+            if (__instance.m_randomGreets.Count > 0)
+            {
+                __instance.Say(__instance.CheckConditionals(__instance.m_randomGreets, true), "");  // Skip animation trigger
+                __instance.m_randomGreetFX.Create(__instance.transform.position, Quaternion.identity);
+            }
         }
 
         if (__instance.m_didGreet && distance > __instance.m_byeRange && !__instance.m_didGoodbye)
         {
             __instance.m_didGoodbye = true;
-            __instance.Say(__instance.m_randomGoodbye, ""); // Skip animation trigger
-            __instance.m_randomGoodbyeFX.Create(__instance.transform.position, Quaternion.identity);
+            Debug.Log($"Goodbye count: {__instance.m_randomGoodbye.Count}");
+            if (__instance.m_randomGoodbye.Count > 0)
+            {
+                __instance.Say(__instance.m_randomGoodbye, "");  // Skip animation trigger
+                __instance.m_randomGoodbyeFX.Create(__instance.transform.position, Quaternion.identity);
+            }
         }
 
-        return false; // Skip original Update method
+        return false;  // Skip original Update method
     }
 }

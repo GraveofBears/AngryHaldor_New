@@ -52,26 +52,14 @@ public class CustomTraderInteraction : MonoBehaviour, Interactable
     private void ShowTraderWindow()
     {
         StoreGui storeGui = StoreGui.instance;
-        if (storeGui == null)
-        {
-            Debug.LogError("StoreGui instance is null. Cannot open trader window.");
-            return;
-        }
+        if (storeGui == null) return;
 
         Trader trader = GetComponent<Trader>();
-        if (trader == null)
+        if (trader != null)
         {
-            Debug.LogError("Trader component is missing on TravelingHaldor. Cannot open trader window.");
-            return;
+            trader.m_items = tradeItems; // Set the trade items for the trader
+            storeGui.Show(trader); // Show trader window with items
         }
-
-        if (trader.m_items == null || trader.m_items.Count == 0)
-        {
-            Debug.LogWarning("Trader has no items configured. Ensure items are added via SetupTraderItems.");
-            return;
-        }
-
-        storeGui.Show(trader); // Display the trader window
     }
 
     public bool UseItem(Humanoid user, ItemDrop.ItemData item)

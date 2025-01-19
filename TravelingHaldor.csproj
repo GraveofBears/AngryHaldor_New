@@ -7,8 +7,8 @@
     <ProjectGuid>{F9B815D6-6EF4-44DB-9A0F-436849B24670}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>AngryHaldor</RootNamespace>
-    <AssemblyName>AngryHaldor</AssemblyName>
+    <RootNamespace>TravelingHaldor</RootNamespace>
+    <AssemblyName>TravelingHaldor</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <LangVersion>9</LangVersion>
@@ -75,6 +75,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Users\GraveBear\Desktop\Refs\ItemManager.dll</HintPath>
     </Reference>
+    <Reference Include="PieceManager, Version=1.2.8.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Users\GraveBear\Desktop\Refs\PieceManager.dll</HintPath>
+    </Reference>
     <Reference Include="ServerSync">
       <HintPath>Libs\ServerSync.dll</HintPath>
     </Reference>
@@ -104,6 +108,10 @@
     <Reference Include="UnityEngine.IMGUIModule">
       <HintPath>..\..\Steam\steamapps\common\Valheim-ptr\unstripped_corlib\UnityEngine.IMGUIModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\Steam\steamapps\common\Valheim-ptr\unstripped_corlib\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.PhysicsModule">
       <HintPath>..\..\Steam\steamapps\common\Valheim-ptr\unstripped_corlib\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
@@ -116,10 +124,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AngryHaldor.cs" />
-    <Compile Include="patches\AngryHaldorPatches.cs" />
-    <Compile Include="patches\CustomTraderInteraction.cs" />
-    <Compile Include="patches\TraderUpdatePatch.cs" />
+    <Compile Include="TravelingHaldor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -132,6 +137,7 @@
     <Content Include="ILRepack.targets" />
     <Content Include="Libs\CreatureManager.dll" />
     <Content Include="Libs\ItemManager.dll" />
+    <Content Include="Libs\PieceManager.dll" />
     <Content Include="Libs\ServerSync.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
