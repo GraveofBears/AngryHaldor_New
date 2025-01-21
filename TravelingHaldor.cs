@@ -40,6 +40,7 @@ public class TravelingHaldor : BaseUnityPlugin
     private List<string> m_randomGreets = new List<string> { "Greetings, traveler!", "Come, see my wares!" };
     private List<string> m_randomGoodbye = new List<string> { "Safe travels!", "Until we meet again!" };
     private List<string> m_randomStartTrade = new List<string> { "Welcome to my shop!", "Let's do business!" };
+    private List<string> m_randomTalk = new List<string> { "Whoa there Halstein!" };
     private EffectList m_randomGreetFX = new EffectList();
     private EffectList m_randomGoodbyeFX = new EffectList();
     private EffectList m_randomStartTradeFX = new EffectList();
@@ -184,7 +185,7 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             trader.m_randomGreets = new List<string> { "Hello!" };
         }
-
+        
         if (trader.m_randomGoodbye == null || trader.m_randomGoodbye.Count == 0)
         {
             trader.m_randomGoodbye = new List<string> { "Goodbye!" };
@@ -193,6 +194,10 @@ public class TravelingHaldor : BaseUnityPlugin
         if (trader.m_randomStartTrade == null || trader.m_randomStartTrade.Count == 0)
         {
             trader.m_randomStartTrade = new List<string> { "Let's trade!" };
+        }
+        if (trader.m_randomTalk == null || trader.m_randomTalk.Count == 0)
+        {
+            trader.m_randomTalk = new List<string> { "Stupid Lox! Whoa!!" };
         }
     }
 
@@ -229,7 +234,7 @@ public class TravelingHaldor : BaseUnityPlugin
     {
         if (activeTraderInstance != null)
         {
-            Destroy(activeTraderInstance);
+            ZNetScene.instance.Destroy(activeTraderInstance);
             yield return new WaitForSeconds(1f);
         }
 
@@ -256,7 +261,7 @@ public class TravelingHaldor : BaseUnityPlugin
         yield return new WaitForSeconds(duration);
         if (activeTraderInstance != null)
         {
-            Destroy(activeTraderInstance);
+            ZNetScene.instance.Destroy(activeTraderInstance);
             activeTraderInstance = null;
         }
     }
