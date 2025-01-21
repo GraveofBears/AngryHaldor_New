@@ -35,15 +35,13 @@ public class TravelingHaldor : BaseUnityPlugin
     private LookAt m_lookAt;
     private bool m_didGreet;
     private bool m_didGoodbye;
-    private float m_dialogHeight = 3.5f;
-    private float m_hideDialogDelay = 5f;
     private List<string> m_randomGreets = new List<string> { "Greetings, traveler!", "Come, see my wares!" };
     private List<string> m_randomGoodbye = new List<string> { "Safe travels!", "Until we meet again!" };
-    private List<string> m_randomStartTrade = new List<string> { "Welcome to my shop!", "Let's do business!" };
-    private List<string> m_randomTalk = new List<string> { "Whoa there Halstein!" };
     private EffectList m_randomGreetFX = new EffectList();
     private EffectList m_randomGoodbyeFX = new EffectList();
-    private EffectList m_randomStartTradeFX = new EffectList();
+    private EffectList m_greetSFX = new EffectList();
+    private EffectList m_yeaSFX = new EffectList();
+
 
     private Text interactText; // Add this field
     private bool isPlayerNearHaldor = false; // Add this field
@@ -79,8 +77,13 @@ public class TravelingHaldor : BaseUnityPlugin
 
     void Awake()
     {
-        GameObject vfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "vfx_spawn_travelinghaldor"); 
+        GameObject vfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "vfx_spawn_travelinghaldor");
         GameObject sfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_spawn_travelinghaldor");
+        GameObject sfxTravelHaldorGreet = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_travelhaldor_greet");
+        GameObject sfxTravelingHaldorYea = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_travelinghaldor_yea");
+        m_greetSFX.m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_travelhaldor_greet") } };
+        m_yeaSFX.m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_travelinghaldor_yea") } };
+
 
         Creature travelingHaldor = new("hangryaldor", "TravelingHaldor")
         {
@@ -185,7 +188,7 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             trader.m_randomGreets = new List<string> { "Hello!" };
         }
-        
+
         if (trader.m_randomGoodbye == null || trader.m_randomGoodbye.Count == 0)
         {
             trader.m_randomGoodbye = new List<string> { "Goodbye!" };
@@ -263,6 +266,7 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             ZNetScene.instance.Destroy(activeTraderInstance);
             activeTraderInstance = null;
+            Debug.Log("Traveling Haldor despawned successfully."); // Debug message
         }
     }
 
@@ -309,6 +313,11 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             m_randomGreetFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
         }
+
+        if (m_greetSFX.m_effectPrefabs != null && m_greetSFX.m_effectPrefabs.Length > 0)
+        {
+            m_greetSFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
+        }
     }
 
     private void PlayGoodbyeEffects()
@@ -323,6 +332,11 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             m_randomGoodbyeFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
         }
+
+        // Play "yea" sound effect
+        if (m_yeaSFX.m_effectPrefabs != null && m_yeaSFX.m_effectPrefabs.Length > 0)
+        {
+            m_yeaSFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
+        }
     }
 }
-
