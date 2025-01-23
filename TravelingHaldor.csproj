@@ -115,6 +115,10 @@
     <Reference Include="UnityEngine.PhysicsModule">
       <HintPath>..\..\Steam\steamapps\common\Valheim-ptr\unstripped_corlib\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\Steam\steamapps\common\Valheim\valheim_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>..\..\Steam\steamapps\common\Valheim-ptr\unstripped_corlib\UnityEngine.UI.dll</HintPath>
     </Reference>

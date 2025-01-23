@@ -10,13 +10,13 @@ using ItemManager;
 using BepInEx.Configuration;
 using System.Reflection;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI; // Add this namespace
+using UnityEngine.UI;
 
 [BepInPlugin(ModGUID, ModName, ModVersion)]
 public class TravelingHaldor : BaseUnityPlugin
 {
     private const string ModName = "TravelingHaldor";
-    private const string ModVersion = "1.0.0";
+    private const string ModVersion = "1.0.1"; 
     private const string ModGUID = "org.bepinex.plugins.travelinghaldor";
 
     private static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
@@ -24,36 +24,59 @@ public class TravelingHaldor : BaseUnityPlugin
     private ConfigEntry<float> eventInterval;
     private ConfigEntry<float> eventChance;
     private ConfigEntry<float> eventDuration;
+    private ConfigEntry<float> spawnDistance; 
+    private ConfigEntry<string> globalKeyRequirement; 
+    private ConfigEntry<SpawnTime> specificSpawnTime; 
     private GameObject travelingHaldorPrefab;
     private Trader travelingHaldorTrader;
     private ConfigEntry<string> traderItemConfig;
-
+    private ConfigEntry<string> customGreetings;
+    private ConfigEntry<string> customGoodbyes;
+    private ConfigEntry<string> customTradeDialogues;
+    private ConfigEntry<bool> enableLocationVariability;
+    private ConfigEntry<string> spawnRegions; 
     private float m_byeRange = 5f;
     private float m_standRange = 15f;
     private float m_greetRange = 5f;
+    private float m_dialogHeight = 5f;
     private Animator m_animator;
     private LookAt m_lookAt;
     private bool m_didGreet;
     private bool m_didGoodbye;
     private List<string> m_randomGreets = new List<string> { "Greetings, traveler!", "Come, see my wares!" };
     private List<string> m_randomGoodbye = new List<string> { "Safe travels!", "Until we meet again!" };
+    private List<string> m_randomStartTrade = new List<string> { "Welcome to my shop!", "Let's do business!" };
+    private List<string> m_randomTalk = new List<string> { "Whoa there Halstein!" };
     private EffectList m_randomGreetFX = new EffectList();
     private EffectList m_randomGoodbyeFX = new EffectList();
-    private EffectList m_greetSFX = new EffectList();
-    private EffectList m_yeaSFX = new EffectList();
 
+    private enum SpawnTime
+    {
+        Always,
+        Day,
+        Night
+    }
 
-    private Text interactText; // Add this field
-    private bool isPlayerNearHaldor = false; // Add this field
 
     void InitConfig()
     {
-        eventInterval = config("Event Settings", "Event Interval (Days)", 3f, "How often (in in-game days) Traveling Haldor appears.");
-        eventChance = config("Event Settings", "Event Chance", 0.5f, "Chance (0-1) of event occurring when interval is reached.");
-        eventDuration = config("Event Settings", "Event Duration", 250f, "How long (seconds) the trader stays.");
-        traderItemConfig = config("Trader Settings", "TradeItems",
+        eventInterval = Config.Bind("Event Settings", "Event Interval (Days)", 3f, "How often (in in-game days) Traveling Haldor appears.");
+        eventChance = Config.Bind("Event Settings", "Event Chance", 0.5f, "Chance (0-1) of event occurring when interval is reached.");
+        eventDuration = Config.Bind("Event Settings", "Event Duration", 250f, "How long (seconds) the trader stays.");
+        spawnDistance = Config.Bind("Event Settings", "Spawn Distance (Meters)", 50f, "Distance from the player at which the trader spawns.");
+        globalKeyRequirement = Config.Bind("Event Settings", "Global Key Requirement", "defeated_gdking", "Global key required to trigger the event. Acceptable values: defeated_bonemass, defeated_gdking, defeated_goblinking, defeated_dragon, defeated_eikthyr, defeated_queen, defeated_fader, defeated_serpent, KilledTroll, killed_surtling, KilledBat.");
+        specificSpawnTime = Config.Bind("Event Settings", "Specific Spawn Time", SpawnTime.Always, "Specify when Haldor can spawn. Acceptable values: Always, Day, Night.");
+
+        traderItemConfig = Config.Bind("Trader Settings", "TradeItems",
             "HelmetYule,1,100;HelmetDverger,1,650;BeltStrength,1,950;YmirRemains,1,120,defeated_gdking;FishingRod,1,350;FishingBait,20,10;Thunderstone,1,50,defeated_gdking;ChickenEgg,1,1500,defeated_goblinking;BarrelRings,3,100",
             "List of items for Traveling Haldor to sell. Format: PrefabName,Amount,Cost,RequiredGlobalKey. Separate multiple items with ';'.");
+
+        customGreetings = Config.Bind("Custom Dialogues", "Greetings", "Greetings, traveler!;Hello!;Welcome!", "Custom greetings for the trader. Separate multiple greetings with ';'.");
+        customGoodbyes = Config.Bind("Custom Dialogues", "Goodbyes", "Safe travels!;Goodbye!;Until next time!", "Custom goodbyes for the trader. Separate multiple goodbyes with ';'.");
+        customTradeDialogues = Config.Bind("Custom Dialogues", "TradeDialogues", "Have a look!;Welcome to my shop!;What can I get you?", "Custom trade dialogues for the trader. Separate multiple dialogues with ';'.");
+
+        enableLocationVariability = Config.Bind("Location Settings", "Enable Location Variability", true, "Enable or disable trader location variability.");
+        spawnRegions = Config.Bind("Location Settings", "Spawn Regions", "Meadows;BlackForest", "Possible spawn regions and biomes for the trader. Separate multiple regions/biomes with ';'. Acceptable values: Meadows, BlackForest, Swamp, Mountain, Plains, AshLands, DeepNorth, Ocean, Mistlands, All, None.");
     }
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
@@ -77,18 +100,17 @@ public class TravelingHaldor : BaseUnityPlugin
 
     void Awake()
     {
+        InitConfig();
+
         GameObject vfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "vfx_spawn_travelinghaldor");
         GameObject sfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_spawn_travelinghaldor");
-        GameObject sfxTravelHaldorGreet = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_travelhaldor_greet");
-        GameObject sfxTravelingHaldorYea = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_travelinghaldor_yea");
-        m_greetSFX.m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_travelhaldor_greet") } };
-        m_yeaSFX.m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_travelinghaldor_yea") } };
-
+        GameObject sfx_travelinghaldor_laugh = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_travelinghaldor_laugh");
 
         Creature travelingHaldor = new("hangryaldor", "TravelingHaldor")
         {
             Biome = Heightmap.Biome.None,
             CreatureFaction = Character.Faction.Players,
+            CanHaveStars = false,
             Maximum = 1
         };
 
@@ -96,35 +118,42 @@ public class TravelingHaldor : BaseUnityPlugin
 
         travelingHaldorPrefab = travelingHaldor.Prefab;
 
-        // Add Trader component, but configure later
+        // Add HoverText component
+        var hoverText = travelingHaldorPrefab.AddComponent<HoverText>();
+        hoverText.m_text = "Open Trade";
+
         travelingHaldorTrader = travelingHaldorPrefab.AddComponent<Trader>();
 
-        // Ensure the prefab has an Animator component
         m_animator = travelingHaldorPrefab.GetComponentInChildren<Animator>();
         if (m_animator == null)
         {
             m_animator = travelingHaldorPrefab.AddComponent<Animator>();
             m_animator.runtimeAnimatorController = Resources.FindObjectsOfTypeAll<RuntimeAnimatorController>()
-                .FirstOrDefault(a => a.name.Contains("HumanoidMonster")); // Example controller
+                .FirstOrDefault(a => a.name.Contains("HumanoidMonster"));
         }
 
-        // Ensure the prefab has a LookAt component
         m_lookAt = travelingHaldorPrefab.GetComponentInChildren<LookAt>();
         if (m_lookAt == null)
         {
             m_lookAt = travelingHaldorPrefab.AddComponent<LookAt>();
         }
 
-        // Load Harmony patches
         Assembly assembly = Assembly.GetExecutingAssembly();
         Harmony harmony = new(ModGUID);
         harmony.PatchAll(assembly);
 
-        // Find and cache the InteractText UI element
-        interactText = GameObject.Find("InteractText")?.GetComponent<Text>();
+        m_randomGreets = customGreetings.Value.Split(';').ToList();
+        m_randomGoodbye = customGoodbyes.Value.Split(';').ToList();
+        m_randomStartTrade = customTradeDialogues.Value.Split(';').ToList();
 
-        // Delay configuring trader items
         StartCoroutine(DelayedTraderSetup());
+    }
+
+
+    private void Start()
+    {
+        InitConfig();
+        StartCoroutine(SpawnEventLoop());
     }
 
     private IEnumerator DelayedTraderSetup()
@@ -133,7 +162,6 @@ public class TravelingHaldor : BaseUnityPlugin
 
         ConfigureTrader(travelingHaldorTrader);
     }
-
     void ConfigureTrader(Trader trader)
     {
         if (trader == null) return; // Prevent null errors
@@ -183,21 +211,27 @@ public class TravelingHaldor : BaseUnityPlugin
 
         trader.m_name = "Traveling Haldor";  // Set custom name
 
+        // Use custom dialogues from config
+        trader.m_randomGreets = customGreetings.Value.Split(';').ToList();
+        trader.m_randomGoodbye = customGoodbyes.Value.Split(';').ToList(); // Correct field name
+        trader.m_randomStartTrade = customTradeDialogues.Value.Split(';').ToList();
+
         // Ensure lists are not empty
         if (trader.m_randomGreets == null || trader.m_randomGreets.Count == 0)
         {
             trader.m_randomGreets = new List<string> { "Hello!" };
         }
 
-        if (trader.m_randomGoodbye == null || trader.m_randomGoodbye.Count == 0)
+        if (trader.m_randomGoodbye == null || trader.m_randomGoodbye.Count == 0) // Correct field name
         {
-            trader.m_randomGoodbye = new List<string> { "Goodbye!" };
+            trader.m_randomGoodbye = new List<string> { "Goodbye!" }; // Correct field name
         }
 
         if (trader.m_randomStartTrade == null || trader.m_randomStartTrade.Count == 0)
         {
             trader.m_randomStartTrade = new List<string> { "Let's trade!" };
         }
+
         if (trader.m_randomTalk == null || trader.m_randomTalk.Count == 0)
         {
             trader.m_randomTalk = new List<string> { "Stupid Lox! Whoa!!" };
@@ -210,12 +244,6 @@ public class TravelingHaldor : BaseUnityPlugin
         return itemPrefab ? itemPrefab.GetComponent<ItemDrop>() : null;
     }
 
-    private void Start()
-    {
-        InitConfig();
-        StartCoroutine(SpawnEventLoop());
-    }
-
     private IEnumerator SpawnEventLoop()
     {
         yield return new WaitUntil(() => Player.m_localPlayer != null);
@@ -224,6 +252,23 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             yield return new WaitForSeconds(ConvertDaysToSeconds(eventInterval.Value));
 
+            // Check for global key requirement
+            if (!string.IsNullOrEmpty(globalKeyRequirement.Value) && !ZoneSystem.instance.GetGlobalKey(globalKeyRequirement.Value))
+            {
+                continue; // Skip the event if the global key requirement is not met
+            }
+
+            // Check for specific spawn time
+            if (specificSpawnTime.Value != SpawnTime.Always)
+            {
+                bool isDaytime = EnvMan.IsDay();
+                if ((specificSpawnTime.Value == SpawnTime.Day && !isDaytime) ||
+                    (specificSpawnTime.Value == SpawnTime.Night && isDaytime))
+                {
+                    continue; // Skip the event if the specific spawn time does not match
+                }
+            }
+
             if (UnityEngine.Random.value < eventChance.Value)
             {
                 StartCoroutine(SpawnTravelingHaldor());
@@ -231,8 +276,9 @@ public class TravelingHaldor : BaseUnityPlugin
         }
     }
 
-    private GameObject activeTraderInstance;
 
+
+    private GameObject activeTraderInstance;
     private IEnumerator SpawnTravelingHaldor()
     {
         if (activeTraderInstance != null)
@@ -241,22 +287,39 @@ public class TravelingHaldor : BaseUnityPlugin
             yield return new WaitForSeconds(1f);
         }
 
-        float randomDistance = UnityEngine.Random.Range(15f, 30f); // Randomize spawn distance
-        Vector3 spawnPosition = Player.m_localPlayer.transform.position + UnityEngine.Random.insideUnitSphere * randomDistance;
+        Vector3 spawnPosition;
+
+        if (enableLocationVariability.Value)
+        {
+            string[] regions = spawnRegions.Value.Split(';');
+            string randomRegion = regions[UnityEngine.Random.Range(0, regions.Length)];
+            spawnPosition = GetRandomSpawnPosition(randomRegion);
+        }
+        else
+        {
+            float randomDistance = UnityEngine.Random.Range(15f, spawnDistance.Value); // Utilize spawnDistance configuration
+            spawnPosition = Player.m_localPlayer.transform.position + UnityEngine.Random.insideUnitSphere * randomDistance;
+        }
+
         spawnPosition.y = ZoneSystem.instance.GetGroundHeight(spawnPosition);
 
         activeTraderInstance = Instantiate(travelingHaldorPrefab, spawnPosition, Quaternion.identity);
 
-        // Play spawn VFX
         EffectList vfxSpawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("vfx_spawn_travelinghaldor") } } };
         vfxSpawnEffect.Create(spawnPosition, Quaternion.identity, null, 1f, 0);
 
-        // Play spawn SFX
         EffectList sfxSpawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_spawn_travelinghaldor") } } };
         sfxSpawnEffect.Create(spawnPosition, Quaternion.identity, null, 1f, 0);
 
-        // Start despawn timer
         StartCoroutine(DespawnTravelingHaldor(eventDuration.Value));
+    }
+
+    private Vector3 GetRandomSpawnPosition(string region)
+    {
+        // Replace this with your logic to get a random position within the specified region
+        // For simplicity, we'll just return a random position near the player
+        float randomDistance = UnityEngine.Random.Range(15f, 30f);
+        return Player.m_localPlayer.transform.position + UnityEngine.Random.insideUnitSphere * randomDistance;
     }
 
     private IEnumerator DespawnTravelingHaldor(float duration)
@@ -264,17 +327,26 @@ public class TravelingHaldor : BaseUnityPlugin
         yield return new WaitForSeconds(duration);
         if (activeTraderInstance != null)
         {
+            // Play despawn VFX
+            EffectList vfxDespawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("vfx_spawn_travelinghaldor") } } };
+            vfxDespawnEffect.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
+
+            // Play despawn SFX
+            EffectList sfxDespawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_spawn_travelinghaldor") } } };
+            sfxDespawnEffect.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
+
+            // Destroy the active instance
             ZNetScene.instance.Destroy(activeTraderInstance);
             activeTraderInstance = null;
-            Debug.Log("Traveling Haldor despawned successfully."); // Debug message
         }
     }
 
 
     private float ConvertDaysToSeconds(float days)
     {
-        return days * 24 * 60 * 60;
+        return days * 30 * 60; // Convert days to seconds, where 1 day = 1800 seconds
     }
+
     private void Update()
     {
         if (activeTraderInstance != null)
@@ -301,24 +373,37 @@ public class TravelingHaldor : BaseUnityPlugin
         }
     }
 
+    private void AdjustDialogueBoxPosition()
+    {
+        GameObject dialogueBox = GameObject.FindObjectOfType<MessageHud>()?.gameObject; // Identify the correct GameObject
+        if (dialogueBox != null)
+        {
+            RectTransform rectTransform = dialogueBox.GetComponent<RectTransform>();
+            if (rectTransform != null)
+            {
+                rectTransform.anchoredPosition = new Vector2(rectTransform.anchoredPosition.x, m_dialogHeight); // Adjust height
+            }
+        }
+    }
+
     private void PlayGreetEffects()
     {
         if (m_randomGreets.Count > 0)
         {
             string greetMessage = m_randomGreets[UnityEngine.Random.Range(0, m_randomGreets.Count)];
             Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, greetMessage);
+
+            // Adjust dialogue box position
+            AdjustDialogueBoxPosition();
         }
 
         if (m_randomGreetFX.m_effectPrefabs != null && m_randomGreetFX.m_effectPrefabs.Length > 0)
         {
             m_randomGreetFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
         }
-
-        if (m_greetSFX.m_effectPrefabs != null && m_greetSFX.m_effectPrefabs.Length > 0)
-        {
-            m_greetSFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
-        }
     }
+
+
 
     private void PlayGoodbyeEffects()
     {
@@ -326,17 +411,14 @@ public class TravelingHaldor : BaseUnityPlugin
         {
             string goodbyeMessage = m_randomGoodbye[UnityEngine.Random.Range(0, m_randomGoodbye.Count)];
             Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, goodbyeMessage);
+
+            AdjustDialogueBoxPosition();
         }
 
         if (m_randomGoodbyeFX.m_effectPrefabs != null && m_randomGoodbyeFX.m_effectPrefabs.Length > 0)
         {
             m_randomGoodbyeFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
         }
-
-        // Play "yea" sound effect
-        if (m_yeaSFX.m_effectPrefabs != null && m_yeaSFX.m_effectPrefabs.Length > 0)
-        {
-            m_yeaSFX.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
-        }
     }
 }
+
