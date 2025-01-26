@@ -114,7 +114,7 @@ public class TravelingHaldor : BaseUnityPlugin
             Maximum = 1
         };
 
-        travelingHaldor.Localize().English("Traveling Haldor");
+        travelingHaldor.Localize().English("Haldor");
 
         travelingHaldorPrefab = travelingHaldor.Prefab;
 
