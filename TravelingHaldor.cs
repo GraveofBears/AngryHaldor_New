@@ -16,7 +16,7 @@ using UnityEngine.UI;
 public class TravelingHaldor : BaseUnityPlugin
 {
     private const string ModName = "TravelingHaldor";
-    private const string ModVersion = "1.0.1"; 
+    private const string ModVersion = "1.0.2"; 
     private const string ModGUID = "org.bepinex.plugins.travelinghaldor";
 
     private static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
@@ -209,7 +209,7 @@ public class TravelingHaldor : BaseUnityPlugin
             }
         }
 
-        trader.m_name = "Traveling Haldor";  // Set custom name
+        trader.m_name = "$npc_haldor";  // Set custom name
 
         // Use custom dialogues from config
         trader.m_randomGreets = customGreetings.Value.Split(';').ToList();
