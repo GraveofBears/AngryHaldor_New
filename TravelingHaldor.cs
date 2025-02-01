@@ -16,7 +16,7 @@ using UnityEngine.UI;
 public class TravelingHaldor : BaseUnityPlugin
 {
     private const string ModName = "TravelingHaldor";
-    private const string ModVersion = "1.0.2"; 
+    private const string ModVersion = "1.0.3"; 
     private const string ModGUID = "org.bepinex.plugins.travelinghaldor";
 
     private static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
@@ -34,7 +34,8 @@ public class TravelingHaldor : BaseUnityPlugin
     private ConfigEntry<string> customGoodbyes;
     private ConfigEntry<string> customTradeDialogues;
     private ConfigEntry<bool> enableLocationVariability;
-    private ConfigEntry<string> spawnRegions; 
+    private ConfigEntry<string> spawnRegions;
+    private ConfigEntry<int> maxHaldorCount;
     private float m_byeRange = 5f;
     private float m_standRange = 15f;
     private float m_greetRange = 5f;
@@ -49,6 +50,8 @@ public class TravelingHaldor : BaseUnityPlugin
     private List<string> m_randomTalk = new List<string> { "Whoa there Halstein!" };
     private EffectList m_randomGreetFX = new EffectList();
     private EffectList m_randomGoodbyeFX = new EffectList();
+    private List<GameObject> activeHaldors = new List<GameObject>();
+
 
     private enum SpawnTime
     {
@@ -66,7 +69,8 @@ public class TravelingHaldor : BaseUnityPlugin
         spawnDistance = Config.Bind("Event Settings", "Spawn Distance (Meters)", 50f, "Distance from the player at which the trader spawns.");
         globalKeyRequirement = Config.Bind("Event Settings", "Global Key Requirement", "defeated_gdking", "Global key required to trigger the event. Acceptable values: defeated_bonemass, defeated_gdking, defeated_goblinking, defeated_dragon, defeated_eikthyr, defeated_queen, defeated_fader, defeated_serpent, KilledTroll, killed_surtling, KilledBat.");
         specificSpawnTime = Config.Bind("Event Settings", "Specific Spawn Time", SpawnTime.Always, "Specify when Haldor can spawn. Acceptable values: Always, Day, Night.");
-
+        maxHaldorCount = Config.Bind("Event Settings", "Max Haldor Count", 1,
+            "Maximum number of Traveling Haldors allowed in the world. Set to 1 to prevent duplicates.");
         traderItemConfig = Config.Bind("Trader Settings", "TradeItems",
             "HelmetYule,1,100;HelmetDverger,1,650;BeltStrength,1,950;YmirRemains,1,120,defeated_gdking;FishingRod,1,350;FishingBait,20,10;Thunderstone,1,50,defeated_gdking;ChickenEgg,1,1500,defeated_goblinking;BarrelRings,3,100",
             "List of items for Traveling Haldor to sell. Format: PrefabName,Amount,Cost,RequiredGlobalKey. Separate multiple items with ';'.");
@@ -77,6 +81,13 @@ public class TravelingHaldor : BaseUnityPlugin
 
         enableLocationVariability = Config.Bind("Location Settings", "Enable Location Variability", true, "Enable or disable trader location variability.");
         spawnRegions = Config.Bind("Location Settings", "Spawn Regions", "Meadows;BlackForest", "Possible spawn regions and biomes for the trader. Separate multiple regions/biomes with ';'. Acceptable values: Meadows, BlackForest, Swamp, Mountain, Plains, AshLands, DeepNorth, Ocean, Mistlands, All, None.");
+
+        // Register the clear command
+        new Terminal.ConsoleCommand("clear_traveling_haldors", "Removes all active Traveling Haldors from the world.", (args) =>
+        {
+            ClearAllHaldors();
+        });
+
     }
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
@@ -281,10 +292,11 @@ public class TravelingHaldor : BaseUnityPlugin
     private GameObject activeTraderInstance;
     private IEnumerator SpawnTravelingHaldor()
     {
-        if (activeTraderInstance != null)
+        // Check if the max Haldor limit is reached
+        if (activeHaldors.Count >= maxHaldorCount.Value)
         {
-            ZNetScene.instance.Destroy(activeTraderInstance);
-            yield return new WaitForSeconds(1f);
+            Debug.Log($"[TravelingHaldor] Max Haldor count ({maxHaldorCount.Value}) reached. No new Haldor will spawn.");
+            yield break; // Exit the coroutine
         }
 
         Vector3 spawnPosition;
@@ -297,13 +309,14 @@ public class TravelingHaldor : BaseUnityPlugin
         }
         else
         {
-            float randomDistance = UnityEngine.Random.Range(15f, spawnDistance.Value); // Utilize spawnDistance configuration
+            float randomDistance = UnityEngine.Random.Range(15f, spawnDistance.Value);
             spawnPosition = Player.m_localPlayer.transform.position + UnityEngine.Random.insideUnitSphere * randomDistance;
         }
 
         spawnPosition.y = ZoneSystem.instance.GetGroundHeight(spawnPosition);
 
-        activeTraderInstance = Instantiate(travelingHaldorPrefab, spawnPosition, Quaternion.identity);
+        GameObject newHaldor = Instantiate(travelingHaldorPrefab, spawnPosition, Quaternion.identity);
+        activeHaldors.Add(newHaldor); // Track the new instance
 
         EffectList vfxSpawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("vfx_spawn_travelinghaldor") } } };
         vfxSpawnEffect.Create(spawnPosition, Quaternion.identity, null, 1f, 0);
@@ -311,8 +324,9 @@ public class TravelingHaldor : BaseUnityPlugin
         EffectList sfxSpawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_spawn_travelinghaldor") } } };
         sfxSpawnEffect.Create(spawnPosition, Quaternion.identity, null, 1f, 0);
 
-        StartCoroutine(DespawnTravelingHaldor(eventDuration.Value));
+        StartCoroutine(DespawnTravelingHaldor(newHaldor, eventDuration.Value));
     }
+
 
     private Vector3 GetRandomSpawnPosition(string region)
     {
@@ -322,23 +336,54 @@ public class TravelingHaldor : BaseUnityPlugin
         return Player.m_localPlayer.transform.position + UnityEngine.Random.insideUnitSphere * randomDistance;
     }
 
-    private IEnumerator DespawnTravelingHaldor(float duration)
+    private IEnumerator DespawnTravelingHaldor(GameObject haldor, float duration)
     {
         yield return new WaitForSeconds(duration);
-        if (activeTraderInstance != null)
+
+        if (haldor != null)
         {
+            Vector3 despawnPosition = haldor.transform.position;
+
             // Play despawn VFX
             EffectList vfxDespawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("vfx_spawn_travelinghaldor") } } };
-            vfxDespawnEffect.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
+            vfxDespawnEffect.Create(despawnPosition, Quaternion.identity, null, 1f, 0);
 
             // Play despawn SFX
             EffectList sfxDespawnEffect = new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = ZNetScene.instance.GetPrefab("sfx_spawn_travelinghaldor") } } };
-            sfxDespawnEffect.Create(activeTraderInstance.transform.position, Quaternion.identity, null, 1f, 0);
+            sfxDespawnEffect.Create(despawnPosition, Quaternion.identity, null, 1f, 0);
 
-            // Destroy the active instance
-            ZNetScene.instance.Destroy(activeTraderInstance);
-            activeTraderInstance = null;
+            // Remove the Haldor from the list
+            activeHaldors.Remove(haldor);
+
+            // Destroy the instance
+            ZNetScene.instance.Destroy(haldor);
         }
+    }
+
+    private void ClearAllHaldors()
+    {
+        int removedCount = 0;
+
+        foreach (Character character in GameObject.FindObjectsOfType<Character>())
+        {
+            if (character != null && character.name.Contains("TravelingHaldor"))
+            {
+                ZNetView znv = character.GetComponent<ZNetView>();
+                if (znv != null)
+                {
+                    znv.ClaimOwnership(); // Ensure we can delete networked objects
+                    znv.Destroy();
+                }
+                else
+                {
+                    ZNetScene.instance.Destroy(character.gameObject);
+                }
+                removedCount++;
+            }
+        }
+
+        Debug.Log($"[TravelingHaldor] Removed {removedCount} Traveling Haldor(s).");
+        Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, $"Removed {removedCount} Traveling Haldor(s)!");
     }
 
 
