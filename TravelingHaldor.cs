@@ -11,6 +11,7 @@ using BepInEx.Configuration;
 using System.Reflection;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using TravelingHaldorMod;
 
 [BepInPlugin(ModGUID, ModName, ModVersion)]
 public class TravelingHaldor : BaseUnityPlugin
@@ -128,12 +129,16 @@ public class TravelingHaldor : BaseUnityPlugin
         travelingHaldor.Localize().English("Haldor");
 
         travelingHaldorPrefab = travelingHaldor.Prefab;
-
-        // Add HoverText component
-        var hoverText = travelingHaldorPrefab.AddComponent<HoverText>();
-        hoverText.m_text = "Open Trade";
-
         travelingHaldorTrader = travelingHaldorPrefab.AddComponent<Trader>();
+
+        // Add HoverText component directly here (optional)
+        var hoverText = travelingHaldorPrefab.GetComponent<HoverText>();
+        if (hoverText == null)
+        {
+            hoverText = travelingHaldorPrefab.AddComponent<HoverText>();
+            hoverText.m_text = "Open Trade";
+        }
+
 
         m_animator = travelingHaldorPrefab.GetComponentInChildren<Animator>();
         if (m_animator == null)
@@ -151,7 +156,7 @@ public class TravelingHaldor : BaseUnityPlugin
 
         Assembly assembly = Assembly.GetExecutingAssembly();
         Harmony harmony = new(ModGUID);
-        harmony.PatchAll(assembly);
+        harmony.PatchAll(typeof(CharacterAwakePatch).Assembly);
 
         m_randomGreets = customGreetings.Value.Split(';').ToList();
         m_randomGoodbye = customGoodbyes.Value.Split(';').ToList();
