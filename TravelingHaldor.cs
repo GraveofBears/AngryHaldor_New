@@ -17,7 +17,7 @@ using TravelingHaldorMod;
 public class TravelingHaldor : BaseUnityPlugin
 {
     private const string ModName = "TravelingHaldor";
-    private const string ModVersion = "1.0.3";
+    private const string ModVersion = "1.0.3"; 
     private const string ModGUID = "org.bepinex.plugins.travelinghaldor";
 
     private static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
@@ -25,9 +25,9 @@ public class TravelingHaldor : BaseUnityPlugin
     private ConfigEntry<float> eventInterval;
     private ConfigEntry<float> eventChance;
     private ConfigEntry<float> eventDuration;
-    private ConfigEntry<float> spawnDistance;
-    private ConfigEntry<string> globalKeyRequirement;
-    private ConfigEntry<SpawnTime> specificSpawnTime;
+    private ConfigEntry<float> spawnDistance; 
+    private ConfigEntry<string> globalKeyRequirement; 
+    private ConfigEntry<SpawnTime> specificSpawnTime; 
     private GameObject travelingHaldorPrefab;
     private Trader travelingHaldorTrader;
     private ConfigEntry<string> traderItemConfig;
@@ -109,6 +109,7 @@ public class TravelingHaldor : BaseUnityPlugin
         Off = 0,
     }
 
+
     void Awake()
     {
         InitConfig();
@@ -138,6 +139,7 @@ public class TravelingHaldor : BaseUnityPlugin
             hoverText.m_text = "Open Trade";
         }
 
+
         m_animator = travelingHaldorPrefab.GetComponentInChildren<Animator>();
         if (m_animator == null)
         {
@@ -163,18 +165,19 @@ public class TravelingHaldor : BaseUnityPlugin
         StartCoroutine(DelayedTraderSetup());
     }
 
+
     private void Start()
     {
         InitConfig();
         StartCoroutine(SpawnEventLoop());
     }
+
     private IEnumerator DelayedTraderSetup()
     {
         yield return new WaitUntil(() => ObjectDB.instance != null); // Wait for ObjectDB to load
 
         ConfigureTrader(travelingHaldorTrader);
     }
-
     void ConfigureTrader(Trader trader)
     {
         if (trader == null) return; // Prevent null errors
@@ -195,14 +198,6 @@ public class TravelingHaldor : BaseUnityPlugin
             trader.m_lookAt = trader.GetComponentInChildren<LookAt>() ?? trader.gameObject.AddComponent<LookAt>();
         }
 
-        // Ensure HoverText component is attached
-        var hoverText = trader.GetComponent<HoverText>();
-        if (hoverText == null)
-        {
-            hoverText = trader.gameObject.AddComponent<HoverText>();
-            hoverText.m_text = "Open Trade";
-        }
-
         trader.m_items = new List<Trader.TradeItem>();
         string[] items = traderItemConfig.Value.Split(';');
 
@@ -212,7 +207,7 @@ public class TravelingHaldor : BaseUnityPlugin
             if (parts.Length < 3) continue;
 
             string itemName = parts[0].Trim();
-            if (!int.TryParse(parts[1], out int amount) || !int.TryParse parts[2], out int price))
+            if (!int.TryParse(parts[1], out int amount) || !int.TryParse(parts[2], out int price))
                 continue;
 
             string requiredGlobalKey = parts.Length > 3 ? parts[3].Trim() : null;
@@ -297,6 +292,8 @@ public class TravelingHaldor : BaseUnityPlugin
         }
     }
 
+
+
     private GameObject activeTraderInstance;
     private IEnumerator SpawnTravelingHaldor()
     {
@@ -334,6 +331,7 @@ public class TravelingHaldor : BaseUnityPlugin
 
         StartCoroutine(DespawnTravelingHaldor(newHaldor, eventDuration.Value));
     }
+
 
     private Vector3 GetRandomSpawnPosition(string region)
     {
@@ -393,6 +391,7 @@ public class TravelingHaldor : BaseUnityPlugin
         Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, $"Removed {removedCount} Traveling Haldor(s)!");
     }
 
+
     private float ConvertDaysToSeconds(float days)
     {
         return days * 30 * 60; // Convert days to seconds, where 1 day = 1800 seconds
@@ -400,8 +399,6 @@ public class TravelingHaldor : BaseUnityPlugin
 
     private void Update()
     {
-        AdjustDialogueBoxPosition();
-
         if (activeTraderInstance != null)
         {
             float distanceToPlayer = Vector3.Distance(activeTraderInstance.transform.position, Player.m_localPlayer.transform.position);
@@ -456,6 +453,8 @@ public class TravelingHaldor : BaseUnityPlugin
         }
     }
 
+
+
     private void PlayGoodbyeEffects()
     {
         if (m_randomGoodbye.Count > 0)
@@ -463,7 +462,6 @@ public class TravelingHaldor : BaseUnityPlugin
             string goodbyeMessage = m_randomGoodbye[UnityEngine.Random.Range(0, m_randomGoodbye.Count)];
             Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, goodbyeMessage);
 
-            // Adjust dialogue box position
             AdjustDialogueBoxPosition();
         }
 
@@ -473,3 +471,4 @@ public class TravelingHaldor : BaseUnityPlugin
         }
     }
 }
+

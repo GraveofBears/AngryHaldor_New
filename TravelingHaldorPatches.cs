@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using System.Linq;
 using UnityEngine;
 
 namespace TravelingHaldorMod
@@ -8,10 +9,9 @@ namespace TravelingHaldorMod
     {
         static void Postfix(Character __instance)
         {
-            // Check if this is the specific character you want to modify
             if (__instance.name == "TravelingHaldor")
             {
-                // Add HoverText component if it doesn't already exist
+                // Ensure HoverText component is attached
                 var hoverText = __instance.GetComponent<HoverText>();
                 if (hoverText == null)
                 {
@@ -19,13 +19,38 @@ namespace TravelingHaldorMod
                     hoverText.m_text = "Open Trade";
                 }
 
-                // Add any other necessary components or initialization here
+                // Ensure Trader component is attached and configured
                 var trader = __instance.GetComponent<Trader>();
                 if (trader == null)
                 {
                     trader = __instance.gameObject.AddComponent<Trader>();
                 }
+
+                ConfigureTrader(trader);
             }
+        }
+
+        private static void ConfigureTrader(Trader trader)
+        {
+            // Add animator if missing
+            if (trader.m_animator == null)
+            {
+                trader.m_animator = trader.GetComponentInChildren<Animator>();
+                if (trader.m_animator == null)
+                {
+                    trader.m_animator = trader.gameObject.AddComponent<Animator>();
+                    trader.m_animator.runtimeAnimatorController = Resources.FindObjectsOfTypeAll<RuntimeAnimatorController>()
+                        .FirstOrDefault(a => a.name.Contains("HumanoidMonster")); // Example controller
+                }
+            }
+
+            // Add LookAt component if missing
+            if (trader.m_lookAt == null)
+            {
+                trader.m_lookAt = trader.GetComponentInChildren<LookAt>() ?? trader.gameObject.AddComponent<LookAt>();
+            }
+
+            // Additional configuration code from ConfigureTrader method in TravelingHaldor class...
         }
     }
 }
