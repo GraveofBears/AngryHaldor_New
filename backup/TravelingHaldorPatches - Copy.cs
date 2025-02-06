@@ -19,6 +19,9 @@ namespace TravelingHaldorMod
                     hoverText.m_text = "Open Trade";
                 }
 
+                // Adjust HoverText height
+                hoverText.transform.position += new Vector3(0, 7.0f, 0); // Adjust Y value as needed
+
                 // Ensure Trader component is attached and configured
                 var trader = __instance.GetComponent<Trader>();
                 if (trader == null)

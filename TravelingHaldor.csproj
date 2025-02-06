@@ -130,7 +130,7 @@
   <ItemGroup>
     <Compile Include="TravelingHaldor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TravelingHaldorPatches.cs" />
+    <Compile Include="TravelingTrader.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="assets\hangryaldor">
