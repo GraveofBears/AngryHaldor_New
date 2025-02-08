@@ -6,6 +6,7 @@ using BepInEx.Configuration;
 using CreatureManager;
 using HarmonyLib;
 using ItemManager;
+using PieceManager;
 using ServerSync;
 using UnityEngine;
 
@@ -15,7 +16,7 @@ namespace TravelingHaldor
     public class TravelingHaldor : BaseUnityPlugin
     {
         private const string ModName = "TravelingHaldor";
-        private const string ModVersion = "1.0.4";
+        private const string ModVersion = "1.0.5";
         private const string ModGUID = "org.bepinex.plugins.travelinghaldor";
         private static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
         public enum Toggle { On = 1, Off = 0, }
@@ -35,6 +36,7 @@ namespace TravelingHaldor
         public static ConfigEntry<float> dialogueHeight = null!;
         public static ConfigEntry<Heightmap.Biome> allowedBiomes = null!;
         public static ConfigEntry<bool> forceDespawn = null!;
+        public static ConfigEntry<bool> enableCustomPins = null;
 
         void InitConfig()
         {
@@ -79,6 +81,8 @@ namespace TravelingHaldor
                 }
             };
 
+            enableCustomPins = Config.Bind("Event Settings", "Enable Custom Pins", false, "Enable or disable custom map pins.");
+
             // Register the clear command
             var command = new Terminal.ConsoleCommand("clear_traveling_haldors",
                 "Removes all active Traveling Haldors from the world.", (args) => { ClearAllHaldors(); });
@@ -108,6 +112,8 @@ namespace TravelingHaldor
 
             travelingHaldor.Localize().English("Haldor");
 
+            MaterialReplacer.RegisterGameObjectForShaderSwap(travelingHaldor.Prefab, MaterialReplacer.ShaderType.UseUnityShader);
+
             var component = travelingHaldor.Prefab.AddComponent<TravelingTrader>();
             component.m_name = "$npc_haldor";
             var animator = travelingHaldor.Prefab.GetComponentInChildren<Animator>();
@@ -124,11 +130,66 @@ namespace TravelingHaldor
             Traveling_Haldor_Token.Trade.Trader = ItemManager.Trader.Haldor;
             GameObject Traveling_Haldor_Token_Pro = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "Traveling_Haldor_Token_Pro");
 
+            // Register custom pin only if the config entry is enabled
+            if (enableCustomPins.Value)
+            {
+                CustomMapPins_Trader.RegisterCustomPin(travelingHaldor.Prefab, "Traveling Haldor", Traveling_Haldor_Token.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons[0]);
+            }
+
             Assembly assembly = Assembly.GetExecutingAssembly();
             Harmony harmony = new(ModGUID);
             harmony.PatchAll(assembly);
         }
+        public static class CustomMapPins_Trader
+        {
+            public class CustomPinhandler_Generic_Trader : MonoBehaviour
+            {
+                public Sprite icon;
+                public string pinName;
+                private Minimap.PinData pin;
 
+                private void Awake()
+                {
+                    pin = new Minimap.PinData();
+                    pin.m_type = Minimap.PinType.Icon0;
+                    pin.m_name = Localization.instance.Localize(pinName);
+                    pin.m_pos = transform.position;
+                    pin.m_icon = icon;
+                    pin.m_save = false;
+                    pin.m_checked = false;
+                    pin.m_ownerID = 0;
+                    RectTransform root = (Minimap.instance.m_mode == Minimap.MapMode.Large) ? Minimap.instance.m_pinNameRootLarge : Minimap.instance.m_pinNameRootSmall;
+                    pin.m_NamePinData = new Minimap.PinNameData(pin);
+                    Minimap.instance.CreateMapNamePin(pin, root);
+                    pin.m_NamePinData.PinNameText.richText = true;
+                    pin.m_NamePinData.PinNameText.overrideColorTags = false;
+                    Minimap.instance?.m_pins?.Add(pin);
+                }
+
+                private void LateUpdate()
+                {
+                    pin.m_checked = false;
+                    pin.m_pos = transform.position;
+                }
+
+                private void OnDestroy()
+                {
+                    if (pin == null) return;
+
+                    // Ensure pin UI elements are safely destroyed
+                    if (pin.m_uiElement != null)
+                        Minimap.instance.DestroyPinMarker(pin);
+                    Minimap.instance?.m_pins?.Remove(pin);
+                }
+            }
+
+            public static void RegisterCustomPin(GameObject go, string name, Sprite icon)
+            {
+                var comp = go.AddComponent<CustomPinhandler_Generic_Trader>();
+                comp.pinName = name;
+                comp.icon = icon;
+            }
+        }
         private void ClearAllHaldors()
         {
             int removedCount = 0;
