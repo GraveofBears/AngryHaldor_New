@@ -91,6 +91,7 @@ namespace TravelingHaldor
         void Awake()
         {
             InitConfig();
+            EventSpawn.SetupServerSync();
 
             GameObject vfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "vfx_spawn_travelinghaldor");
             GameObject sfx_spawn_travelinghaldor = ItemManager.PrefabManager.RegisterPrefab("hangryaldor", "sfx_spawn_travelinghaldor");
@@ -205,9 +206,15 @@ namespace TravelingHaldor
             if (Player.m_localPlayer) Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"Removed {removedCount} Traveling Haldor(s)!");
         }
 
+        private float m_updateSpawnTimer;
+
         private void Update()
         {
-            TravelingTrader.UpdateSpawn();
+            m_updateSpawnTimer += Time.fixedTime;
+            if (m_updateSpawnTimer < 10f) return;
+            m_updateSpawnTimer = 0.0f;
+            EventSpawn.UpdateLocation();
+            EventSpawn.UpdateSpawn();
         }
 
         private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
